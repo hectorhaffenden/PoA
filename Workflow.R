@@ -1,4 +1,4 @@
-### GT Efficient no matrix
+### GT Efficient
 library(tidyverse) # Tibbles etc
 library(pracma) # Used for integrals
 options(scipen=999)
@@ -8,25 +8,21 @@ PriceOfAnarchy <- function(cost.and.flow.tibble, variable.limits){
   #
   #
   #
-  #
+  # function to compost costs and flows
   Composite <- function(f, g) {
     force(f)
     force(g)
     function(...) f(g(...))
   }
-  ###########
-  # Optimal #
-  ###########
   # Inputs
   data <- cost.and.flow.tibble %>% 
     mutate(cost.flow.comp = mapply(Composite, cost.and.flow.tibble$cost, cost.and.flow.tibble$flow))
-  
-  
+  # Optimal Solver
   Optimal <- function(x){
     compss <- data$cost.flow.comp
     flowss <- data$flow
     
-
+    
     n <- length(variable.limits)
     txt <- sprintf("list(%s)", toString(paste0("x[", 1:n, "]")))
     cobj <- parse(text = txt)[[1]]
@@ -38,67 +34,12 @@ PriceOfAnarchy <- function(cost.and.flow.tibble, variable.limits){
     }
     return(sum(na.omit(hold)))
   }
-  
-  ###########
-  #  Nash   #
-  ###########
-  # Just getting rid of warnings
-  integral <- function (fun, xmin, xmax, method = c("Kronrod", "Clenshaw", "Simpson"), no_intervals = 8, random = FALSE, reltol = 0.00000001, abstol = 0, ...) {
-    stopifnot(is.numeric(xmin), length(xmin) == 1, is.numeric(xmax), 
-              length(xmax) == 1)
-    no_intervals <- max(1, floor(no_intervals))
-    fun <- match.fun(fun)
-    f <- function(x) fun(x, ...)
-    if (length(f(xmin)) > 1 || length(f(xmax)) > 1) {
-      stop("Function 'fun' is array-valued! Use 'quadv'.\n")
-    }
-    if (length(f(c(xmin, xmax))) != 2) {
-      f = Vectorize(f)
-    }
-    if (xmin == xmax) 
-      return(0)
-    method <- match.arg(method)
-    tol <- if (abstol > 0) 
-      min(reltol, abstol)
-    else reltol
-    if (is.infinite(xmin) || is.infinite(xmax)) {
-      cat("For infinite domains Gauss integration is applied!\n")
-      Q <- quadinf(f, xmin, xmax, tol = tol)$Q
-      return(Q)
-    }
-    if (random) {
-      xs <- c(xmin, (xmax - xmin) * sort(runif(no_intervals - 
-                                                 1)) + xmin, xmax)
-    }
-    else {
-      xs <- linspace(xmin, xmax, no_intervals + 1)
-    }
-    Q <- 0
-    if (method == "Kronrod") {
-      for (i in 1:no_intervals) {
-        Q = Q + quadgk(f, xs[i], xs[i + 1], tol = tol)
-      }
-    }
-    else if (method == "Clenshaw") {
-      for (i in 1:no_intervals) {
-        Q = Q + quadcc(f, xs[i], xs[i + 1], tol = tol)
-      }
-    }
-    else if (method == "Simpson") {
-      for (i in 1:no_intervals) {
-        Q = Q + simpadpt(f, xs[i], xs[i + 1], tol = tol)
-      }
-    }
-    else {
-      stop("Unknown method; not available as integration routine.")
-    }
-    return(Q)
-  }
+  # Nash Solver
   Nash <- function(x){
     costss <- data$cost
     compss <- data$cost.flow.comp
     flowss <- data$flow
-
+    
     n <- length(variable.limits)
     txt <- sprintf("list(%s)", toString(paste0("x[", 1:n, "]")))
     cobj <- parse(text = txt)[[1]]
@@ -114,16 +55,15 @@ PriceOfAnarchy <- function(cost.and.flow.tibble, variable.limits){
       if (is.na(flowss.raw[i])){
         data$intergralss[[i]] <- 0
       } else {
-        data$intergralss[[i]] <- integral(data$cost[[i]], xmin = 0, xmax = flowss.raw[i])
+        data$intergralss[[i]] <- integral(Vectorize(data$cost[[i]]), xmin = 0, xmax = flowss.raw[i])
       }
     }
     return(sum(unlist(data$intergralss)))
   }
-
-  N <- bobyqa(c(rep(0,length(variable.limits))), Nash, lower = c(rep(0,length(variable.limits))), upper = variable.limits)
+  # Solution - Using Nash and Optimal
   S <- bobyqa(c(rep(0,length(variable.limits))), Optimal, lower = c(rep(0,length(variable.limits))), upper = variable.limits)
+  N <- bobyqa(c(rep(0,length(variable.limits))), Nash, lower = c(rep(0,length(variable.limits))), upper = variable.limits)
   real.nash.value <- Optimal(N$par)
-  
   price.of.anarchy <- S$value / real.nash.value
   return(list(PoA = price.of.anarchy, optimal.value = S$value, optimal.pars = S$par, nash.value = real.nash.value, nash.pars = N$par))
 }
@@ -135,9 +75,39 @@ PriceOfAnarchy <- function(cost.and.flow.tibble, variable.limits){
 ############################
 ### 2 player ###
 player2 <- tibble(cost = c(function(x){0}, function(x){0}, function(x){NA}, function(x){x^2}, function(x){(3/2)*x},  function(x){x}),
-                            flow = c(function(alpha,beta){(1/2)-alpha},function(alpha,beta){(1/2)-beta},  function(alpha,beta){NA}, function(alpha,beta){alpha},  function(alpha,beta){beta},
-                                     function(alpha, beta){1-alpha-beta}))
+                  flow = c(function(alpha,beta){(1/2)-alpha},function(alpha,beta){(1/2)-beta},  function(alpha,beta){NA}, function(alpha,beta){alpha},  function(alpha,beta){beta},
+                           function(alpha, beta){1-alpha-beta}))
+
 PriceOfAnarchy(player2, c((1/2), (1/2)))
+
+## Extra 1 - Changes the variable limit for beta
+hol <- NULL
+my_seq <- seq(0.12, (0.22), by=0.001)
+for (i in my_seq){
+  f1 <- PriceOfAnarchy(player2, c((1/2), i))$PoA
+  hol <- c(hol, f1)
+  
+}
+plot(hol, x = my_seq, main = "Change in PoA given different starting proportions",
+     xlab = "Different set of parameters",
+     ylab = "PoA",
+     type = "b")
+
+# Extra 2 - Changes coeficient for alpha flow
+hol2 <- NULL
+my_seq <- seq(0, (1), by=0.01)
+for (i in my_seq){
+  player2 <- tibble(cost = c(function(x){0}, function(x){0}, function(x){NA}, function(x){x^2}, function(x){(3/2)*x},  function(x){x}),
+                    flow = c(function(alpha,beta){(1/2)-alpha},function(alpha,beta){(1/2)-beta},  function(alpha,beta){NA}, function(alpha,beta){(i^2)*alpha},  function(alpha,beta){beta},
+                             function(alpha, beta){1-alpha-beta}))
+  f1 <- PriceOfAnarchy(player2, c((1/2), (1/2)))$PoA
+  hol2 <- c(hol2, f1)
+  
+}
+plot(hol, x = my_seq, main = "Change in PoA given different coeficient for alpha",
+     xlab = "Different set of parameters",
+     ylab = "PoA",
+     type = "b")
 
 
 ### 3 player ###
@@ -150,14 +120,6 @@ PriceOfAnarchy(player3, c((3/12), (4/12), (5/12)))
 
 
 
-### 2 player - 2 middle bits ###
-player2middle2 <- tibble(cost = c(function(x){x}, function(x){x}, function(x){x^2}, function(x){x}, function(x){x}, function(x){x}, function(x){NA}, function(x){NA}, function(x){x^2}, function(x){NA}, function(x){NA}, function(x){x^2}),
-                         flow = c(function(alpha,beta,theta,gamma){beta}, function(alpha,beta,theta,gamma){(1/4)-alpha-beta}, function(alpha,beta,theta,gamma){alpha}, function(alpha,beta,theta,gamma){theta}, function(alpha,beta,theta,gamma){gamma}, function(alpha,beta,theta,gamma){(3/4)-theta-gamma}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){(1/4)-alpha-beta-gamma}))
-
-player2middle2$cost
-player2middle2$flow
-
-
 
 ### 3 player - 2x2 middle ###
 player3middle2x2 <- tibble(cost = c(function(x){0}, function(x){x},function(x){x^2},function(x){x},function(x){x},function(x){0},function(x){x},function(x){x^2},function(x){x^2},function(x){x},function(x){(1/2)*x},function(x){x}),
@@ -167,4 +129,5 @@ player3middle2x2 <- tibble(cost = c(function(x){0}, function(x){x},function(x){x
 
 PriceOfAnarchy(player3middle2x2, c((6/10),(1/10),(3/10),1,1))
 
-               
+
+
