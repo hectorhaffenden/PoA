@@ -1,6 +1,7 @@
 ### GT Efficient
-library(tidyverse) # Tibbles etc
+library(tidyverse) # Tibbles and workflow
 library(pracma) # Used for integrals
+library(nloptr) # Non-linear optimisation
 options(scipen=999)
 PriceOfAnarchy <- function(cost.and.flow.tibble, variable.limits){
   # Build cost and flow tibble with the cost column containing all costs, and flow with the respective flows.
