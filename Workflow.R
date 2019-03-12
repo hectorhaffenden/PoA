@@ -2,11 +2,6 @@
 library(tidyverse) # Tibbles etc
 library(pracma) # Used for integrals
 options(scipen=999)
-
-cost.and.flow.tib <- tibble(cost = c(function(x){0}, function(x){0}, function(x){NA}, function(x){x^2}, function(x){(3/2)*x},  function(x){x}),
-                      flow = c(function(alpha,beta){(1/2)-alpha},function(alpha,beta){(1/2)-beta},  function(alpha,beta){NA}, function(alpha,beta){alpha},  function(alpha,beta){beta},
-                               function(alpha, beta){1-alpha-beta}))
-variable.lim <- c(0.5,0.5)
 PriceOfAnarchy <- function(cost.and.flow.tibble, variable.limits){
   # Build cost and flow tibble with the cost column containing all costs, and flow with the respective flows.
   # When building flow colum, use every variable in each function, even if the function dosen't call it.
@@ -99,12 +94,6 @@ PriceOfAnarchy <- function(cost.and.flow.tibble, variable.limits){
     }
     return(Q)
   }
-  
-  
-  data <- cost.and.flow.tibble %>% 
-    mutate(cost.flow.comp = mapply(Composite, cost.and.flow.tibble$cost, cost.and.flow.tibble$flow))
-  
-  
   Nash <- function(x){
     costss <- data$cost
     compss <- data$cost.flow.comp
@@ -128,10 +117,6 @@ PriceOfAnarchy <- function(cost.and.flow.tibble, variable.limits){
         data$intergralss[[i]] <- integral(data$cost[[i]], xmin = 0, xmax = flowss.raw[i])
       }
     }
-    hold <- NULL
-    for (i in 1:nrow(data)){
-      hold <- c(hold, do.call(compss[[i]], xs[1:length(variable.limits)]))
-    }
     return(sum(unlist(data$intergralss)))
   }
 
@@ -142,4 +127,44 @@ PriceOfAnarchy <- function(cost.and.flow.tibble, variable.limits){
   price.of.anarchy <- S$value / real.nash.value
   return(list(PoA = price.of.anarchy, optimal.value = S$value, optimal.pars = S$par, nash.value = real.nash.value, nash.pars = N$par))
 }
-PriceOfAnarchy(cost.and.flow.tib, variable.lim)
+
+
+
+############################
+#        EXAMPLES          #
+############################
+### 2 player ###
+player2 <- tibble(cost = c(function(x){0}, function(x){0}, function(x){NA}, function(x){x^2}, function(x){(3/2)*x},  function(x){x}),
+                            flow = c(function(alpha,beta){(1/2)-alpha},function(alpha,beta){(1/2)-beta},  function(alpha,beta){NA}, function(alpha,beta){alpha},  function(alpha,beta){beta},
+                                     function(alpha, beta){1-alpha-beta}))
+PriceOfAnarchy(player2, c((1/2), (1/2)))
+
+
+### 3 player ###
+player3 <- tibble(cost = c(function(x){x}, function(x){x}, function(x){x}, function(x){x^2}, function(x){x}, function(x){x^2}, function(x){NA}, function(x){x}),
+                  flow = c(function(alpha,beta,theta){(3/12)-alpha}, function(alpha,beta,theta){alpha}, function(alpha,beta,theta){(4/12)-beta}, function(alpha,beta,theta){beta}, function(alpha,beta,theta){(5/12)-theta}, function(alpha,beta,theta){theta}, function(alpha,beta,theta){NA}, function(alpha,beta,theta){1-alpha-beta-theta}))
+
+
+PriceOfAnarchy(player3, c((3/12), (4/12), (5/12)))
+
+
+
+
+### 2 player - 2 middle bits ###
+player2middle2 <- tibble(cost = c(function(x){x}, function(x){x}, function(x){x^2}, function(x){x}, function(x){x}, function(x){x}, function(x){NA}, function(x){NA}, function(x){x^2}, function(x){NA}, function(x){NA}, function(x){x^2}),
+                         flow = c(function(alpha,beta,theta,gamma){beta}, function(alpha,beta,theta,gamma){(1/4)-alpha-beta}, function(alpha,beta,theta,gamma){alpha}, function(alpha,beta,theta,gamma){theta}, function(alpha,beta,theta,gamma){gamma}, function(alpha,beta,theta,gamma){(3/4)-theta-gamma}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){NA}, function(alpha,beta,theta,gamma){(1/4)-alpha-beta-gamma}))
+
+player2middle2$cost
+player2middle2$flow
+
+
+
+### 3 player - 2x2 middle ###
+player3middle2x2 <- tibble(cost = c(function(x){0}, function(x){x},function(x){x^2},function(x){x},function(x){x},function(x){0},function(x){x},function(x){x^2},function(x){x^2},function(x){x},function(x){(1/2)*x},function(x){x}),
+                           flow = c(function(d1,d2,d3,d4,d5){d1},function(d1,d2,d3,d4,d5){1-d1},function(d1,d2,d3,d4,d5){d2},function(d1,d2,d3,d4,d5){1-d2},function(d1,d2,d3,d4,d5){d3},function(d1,d2,d3,d4,d5){1-d3},function(d1,d2,d3,d4,d5){d4},function(d1,d2,d3,d4,d5){d1+d2+d3-d4},function(d1,d2,d3,d4,d5){d5},function(d1,d2,d3,d4,d5){1-d1-d2-d3-d5},function(d1,d2,d3,d4,d5){d4+d5},function(d1,d2,d3,d4,d5){1-d4-d5}))
+
+
+
+PriceOfAnarchy(player3middle2x2, c((6/10),(1/10),(3/10),1,1))
+
+               
