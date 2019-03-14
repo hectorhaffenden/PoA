@@ -1,3 +1,5 @@
+https://zenodo.org/badge/174256558.svg
+
 # PoA
 Price of Anarchy - Routing Games
 
