@@ -1,0 +1,261 @@
+
+# Ensure we have all the packages...
+library(shiny) # install.packages("shiny")
+library(rhandsontable) # install.packages("rhandsontable")
+library(tidyverse) # install.packages("tidyverse")
+library(DT) # install.packages("DT")
+library(pracma) # install.packages("pracma")
+library(nloptr) # install.packages("nloptr")
+library(igraph) # install.packages("igraph")
+
+
+
+# Now lets run all functions in the package....
+
+Composite <- function(f, g) {
+  force(f)
+  force(g)
+  function(...) f(g(...))
+}
+
+RoutingPlot <- function(new_input_plot){
+
+  gtest <- graph(strsplit(paste0(new_input_plot$from," ", new_input_plot$to, collapse = " "), split = " ")[[1]])
+
+  labels_cost_and_flow <- paste0(new_input_plot$flow, " \n c(x) = " ,new_input_plot$cost)
+
+  plot(gtest,
+       edge.arrow.size=.4, edge.curved=.1, vertex.size = 20,
+       edge.label	= labels_cost_and_flow,
+       edge.arrow.size = 5,
+       edge.arrow.width	= 3,
+       edge.width = 2,
+       layout = layout_with_fr(gtest))
+}
+
+PriceOfAnarchy <- function(new_input, new_variables_flow, variable.limits){
+  cost.and.flow.tibble <- InputConverter(new_input, new_variables_flow)
+  # Build cost and flow tibble with the cost column containing all costs, and flow with the respective flows.
+  # When building flow colum, use every variable in each function, even if the function dosen't call it.
+  data <- cost.and.flow.tibble %>%
+    mutate(cost.flow.comp = mapply(Composite, cost.and.flow.tibble$cost, cost.and.flow.tibble$flow))
+  # Solution - Using Nash and Optimal
+  S <- bobyqa(c(rep(0,length(variable.limits))), Optimal, lower = c(rep(0,length(variable.limits))), upper = variable.limits, data = data)
+  N <- bobyqa(c(rep(0,length(variable.limits))), Nash, lower = c(rep(0,length(variable.limits))), upper = variable.limits, data = data)
+  real.nash.value <- Optimal(N$par, data = data)
+  price.of.anarchy <- real.nash.value / S$value
+  return(list(PoA = price.of.anarchy, optimal.value = S$value, optimal.pars = S$par, nash.value = real.nash.value, nash.pars = N$par))
+}
+
+# Optimal Solver
+Optimal <- function(x, data){
+
+  compss <- data$cost.flow.comp
+  flowss <- data$flow
+
+  n <-  length(formals(data$flow[[1]]))
+  txt <- sprintf("list(%s)", toString(paste0("x[", 1:n, "]")))
+  cobj <- parse(text = txt)[[1]]
+  xs <- eval(cobj)
+
+  hold <- NULL
+  for (i in 1:nrow(data)){
+    hold <- c(hold, do.call(compss[[i]], xs[1:n]) * do.call(flowss[[i]], xs[1:n]))
+  }
+
+  return(sum(na.omit(hold)))
+}
+
+# Nash Solver
+Nash <- function(x, data){
+  costss <- data$cost
+  compss <- data$cost.flow.comp
+  flowss <- data$flow
+
+  n <-  length(formals(data$flow[[1]]))
+  txt <- sprintf("list(%s)", toString(paste0("x[", 1:n, "]")))
+  cobj <- parse(text = txt)[[1]]
+  xs <- eval(cobj)
+
+  # Making uppers
+  flowss.raw <- NULL
+  for (i in 1:length(flowss)){
+    flowss.raw <- c(flowss.raw, do.call(flowss[[i]], xs[1:n]))
+  }
+  data$intergralss <- costss
+  for (i in 1:nrow(data)){
+    if (is.na(flowss.raw[i])){
+      data$intergralss[[i]] <- 0
+    } else {
+      data$intergralss[[i]] <- integral(Vectorize(data$cost[[i]]), xmin = 0, xmax = flowss.raw[i])
+    }
+  }
+  return(sum(unlist(data$intergralss)))
+}
+
+InputConverter <- function(new_input, new_variables_flow){
+  # For example, inputs are like this,
+  # new_variables_flow <- c("alpha", "beta")
+  # new_input <- tibble(cost = c("0", "0", "NA", "x^2", "(3/2)*x", "x"),
+  #      flow = c("(1/2)-alpha", "(1/2)-beta", "NA", "alpha", "beta", "1-alpha-beta"))
+
+  cost_functions <- paste0("function(x){", new_input$cost, "}") %>%
+    tibble()
+  cost_fucntins_good_form <- apply(cost_functions, 1, function(x){eval(parse(text=x))})
+
+  vars__in_one_string <- paste0(new_variables_flow, collapse = ", ")
+
+  flow_functions <- new_input$flow %>%
+    paste0("function(", vars__in_one_string, "){", ., "}") %>%
+    tibble()
+  flow_functions_good_form <- apply(flow_functions, 1, function(x){eval(parse(text=x))})
+  players_done <- tibble(cost = cost_fucntins_good_form, flow = flow_functions_good_form)
+  return(players_done)
+}
+
+
+
+# NOW DEFINE THE SHINY SERVER
+
+
+
+make_DF <- function(n) {
+  DF <- data_frame(
+    entry = 1:n,
+    cost = NA_character_,
+    flow = NA_character_,
+    from = NA_character_,
+    to = NA_character_
+  )
+  DF[-1]
+}
+
+ui <- fluidPage(
+  
+  
+  
+  tabPanel("Input",
+           column(4,
+                  wellPanel(
+                    numericInput("n_entries",
+                                 "Number of arc in routing network:",
+                                 value = 1,
+                                 min = 0),
+                    actionButton("update_table", "Update Table"),
+                    actionButton("plot_me", "Plot Data"),
+                    actionButton("solver", "Solve Routing Game"),
+                    textInput('vec1', 'Enter the variable limits', "0.5,0.5"),
+                    textInput('flow_vars', 'Enter a vector of flow variables', "alpha,beta")
+                    
+                  )
+           ),
+           column(8,
+                  rHandsontableOutput("input_data") )
+  ),
+  tabPanel("Output",
+           column(4,
+                  plotOutput("test_output")
+           ), column(4,
+                     sidebarLayout(
+                       sidebarPanel = NULL, mainPanel(verbatimTextOutput("solver_output"))
+                     ))
+  )
+)
+
+
+server <- function(input, output) {
+  # create or update the data frame by adding some rows
+  values <- reactiveValues()
+
+
+  observeEvent(input$update_table, {
+
+
+    # if a table does not already exist, this is our DF
+    if (input$update_table == 1) {
+      values$df <- make_DF(input$n_entries)
+    } else if (input$n_entries != 0){ # otherwise,  append the new data frame to the old.
+      tmp_data <- hot_to_r(input$input_data)
+      values$df[,names(tmp_data)] <- tmp_data
+
+      values$df <- bind_rows(values$df, make_DF(input$n_entries))
+    } else {
+      tmp_data <- hot_to_r(input$input_data)
+      values$df[,names(tmp_data)] <- tmp_data
+    }
+
+    # finally, set up table for data entry
+    DF_shown <- values$df[c('cost', 'flow', 'from', "to")]
+    output$input_data <- renderRHandsontable({rhandsontable(DF_shown)})
+  })
+
+  observeEvent(input$plot_me, {
+    tmp_data <- hot_to_r(input$input_data)
+    values$df[,names(tmp_data)] <- tmp_data
+    DF_shown <- values$df[c('cost', 'flow', 'from', "to")]
+    output$test_output <- renderPlot(RoutingPlot(DF_shown))
+
+  })
+
+
+
+  #output$oid2<-renderPrint({
+  #  x <- as.numeric(unlist(strsplit(input$vec1,",")))
+  ##  cat("As atomic vector:\n")
+  #  print(x)
+  #}
+  #)
+
+
+  observeEvent(input$solver, {
+    tmp_data <- hot_to_r(input$input_data)
+    values$df[,names(tmp_data)] <- tmp_data
+    DF_shown <- values$df[c('cost', 'flow', 'from', "to")]
+
+    x_vec <- as.numeric(unlist(strsplit(input$vec1,",")))
+    x_flow_vars <- unlist(strsplit(input$flow_vars,","))
+
+
+    mylist <- PriceOfAnarchy(new_input = DF_shown, new_variables_flow = x_flow_vars, variable.limits = x_vec)
+
+    output$solver_output <- renderPrint({
+      print(mylist)
+    })
+
+  })
+
+}
+
+
+# HERE WE LAUNCH THE SHINY SERVER, follow instructions.
+# 1. Enter number of arcs, click 'update table'.
+# 2. In the table, enter the costs, flows, and which arcs the edge goes from and to.
+# 3. Click 'Plot data' to plot it.
+# 4. Enter the correct variable limits, and flow variables, then click 'solve routing game'.
+# Note: See examples below for how to enter the data.
+shinyApp(ui = ui, server = server)
+
+
+
+# Some working examples... Not using the shiny app
+
+# Small one from the routing games vknight website
+#new_input_plot <- tibble(cost = c("0", "0", "x^2", "(3/2)*x", "x"),
+#                         flow = c("(1/2)-alpha", "(1/2)-beta", "alpha", "beta", "1-alpha-beta"),
+#                         from = c("s1", "s2", "s1", "s2", "a"),
+#                         to = c("a", "a", "t", "t", "t"))
+#new_variables_flow <- c("alpha", "beta")
+#PriceOfAnarchy(new_input_plot, new_variables_flow, variable.limits = c((1/2), (1/2)))
+#RoutingPlot(new_input_plot)
+#
+#
+#
+# More complex 3 player, 2x2 in middle graph
+#new_input_3_plot <- tibble(cost = c("0", "x", "x^2", "x", "x", "0", "x", "x^2", "x^2", "x", "(1/2)*x", "x"),
+#                           flow = c("d1", "1-d1", "d2", "1-d2", "d3", "1-d3", "d4", "d1+d2+d3-d4", "d5",
+#                                    "1-d1-d2-d3-d5", "d4+d5", "1-d4-d5"),
+#                           from = c("s1", "s1", "s2", "s2", "s3", "s3", "A", "A", "P", "P", "A2", "P2"),
+#                           to = c("A", "P", "A", "P", "A", "P", "A2", "P2", "A2", "P2", "t", "t"))
+#new_variables_flow_3 <- c("d1", "d2", "d3", "d4", "d5")
+#PriceOfAnarchy(new_input_3_plot, new_variables_flow_3, variable.limits = c((6/10),(1/10),(3/10),1,1))
+#RoutingPlot(new_input_3_plot)
