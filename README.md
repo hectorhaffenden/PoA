@@ -18,5 +18,5 @@ Examples are in .Rd file
 
 ## Shiny App
 
-Interactive Shiny app to visualise the routing game, and compute relavent matrix.
+Interactive Shiny app to visualise the routing game, and compute relevant metrics.
 https://hectorhaffenden.shinyapps.io/shiny_full/
