@@ -3,8 +3,20 @@
 # PoA
 Price of Anarchy - Routing Games
 
+Find this package on CRAN.
+https://cran.r-project.org/web/packages/PoA/index.html
+
+
+## To install
+
+install.packages("PoA")
+library(PoA)
+
+
 Examples are in .Rd file
 
-install_github("hectorhaffenden/PoA")
 
-library(PoA)
+## Shiny App
+
+Interactive Shiny app to visualise the routing game, and compute relavent matrix.
+https://hectorhaffenden.shinyapps.io/shiny_full/
