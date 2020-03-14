@@ -20,3 +20,5 @@ Examples are in .Rd file
 
 Interactive Shiny app to visualise the routing game, and compute relevant metrics.
 https://hectorhaffenden.shinyapps.io/shiny_full/
+
+    headers = {'User-Agent': 'Chrome/56.0.2924.76', 'Authorization': 'Atmosphere atmosphere_app_id=kingfisher-7c4QgmLEROp4PUh0oUebbI94'}
