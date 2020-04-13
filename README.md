@@ -1,5 +1,10 @@
 [![DOI](https://zenodo.org/badge/174256558.svg)](https://zenodo.org/badge/latestdoi/174256558)
 
+[![Grand Total](https://cranlogs.r-pkg.org/badges/grand-total/PoA)](https://cran.r-project.org/web/packages/PoA/index.html)
+
+
+
+
 # PoA
 Price of Anarchy - Routing Games
 
